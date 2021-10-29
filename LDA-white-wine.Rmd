@@ -1,0 +1,191 @@
+---
+title: "Clasificación de vinos"
+output: html_document
+---
+
+
+## Datos
+
+### Librerias necesarias para el análisis
+
+```{r cars, message=FALSE}
+library(dplyr)
+library(readr)
+library(ggcorrplot)
+library(DataExplorer)
+library(visdat)
+library(caret)
+library(MASS)
+```
+
+### Importando el conjunto de datos
+
+```{r, message=FALSE}
+#w.wine <- read_delim("data/winequality-white.csv", col_names  = T, delim = ";",
+#                     show_col_types = FALSE)
+
+# Directamente de internet
+url.download <- "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-white.csv"
+
+w.wine <- read_delim(url.download, col_names  = T, delim = ";",
+                     show_col_types = FALSE)
+```
+
+## Construcción de los datos
+### Valores perdidos
+
+Se hace una gráfica que mostrara la proporción de valores perdidos en los datos, en caso de haber.
+
+```{r}
+plot_missing(w.wine)
+```
+
+Puede verse que no hay datos perdidos, lo que sigue ver es inspeccionar la consistencia de los datos.
+
+
+
+### Variable Independiente: Calidad
+
+Veamos el histograma de la calidad
+
+```{r}
+ggplot(data = w.wine, aes(x = quality)) + 
+  geom_bar() + labs(x = "Calidad", "Frecuencia")
+
+ggplot(data = w.wine, aes(x = quality)) + 
+  geom_bar(aes(y = (..count..)/sum(..count..))) + 
+  labs(x = "Calidad", y = "Frecuencia relativa")
+```
+
+Proporciones en las categorías de la calidad
+
+```{r}
+prop.table( table(w.wine$quality) )
+```
+### Agrupando las calidades en 3 categorías
+
+Sería conveniente considerar las siguientes categorías:
+
+-   **Malo:** 3,4,5
+-   **Regular:** 6 
+-   **Bueno:** 7,8,9
+
+Se crea una nueva columna en el conjunto de datos para alojar estas etiquetas
+
+```{r}
+data <- w.wine %>% 
+  mutate(quality.label = recode(factor(quality), 
+                                "3" = "malo", "4" = "malo", "5" = "malo",
+                                "6" = "regular",
+                                "7" = "bueno", "8" = "bueno", "9" = "bueno",
+                                .default = "NA"))
+
+unique(data$quality.label) # confirmar las categorias
+```
+
+## Análisis exploratorio
+
+### Histogramas
+
+```{r}
+plot_histogram(data)
+```
+
+### Diagramas de cajas
+```{r}
+plot_boxplot(data, by = "quality.label")
+```
+
+
+
+### Matriz de Correlaciones
+
+```{r}
+# calculo de la matriz
+res <- cor(data[-13], method = "pearson") 
+
+# graficacion
+ggcorrplot(res, method = "square", lab = T, hc.order = T)
+ggcorrplot(res, method = "square", lab = T)
+```
+
+## Modelos de Clasificación
+### Conjuntos de Entrenamiento y Prueba
+Antes de hacer los modelos, se dividen los datos en un conjunto de entrenamiento y uno de prueba, usando la proporción
+
+- **Entrenamiento:** 80%
+- **Prueba:** 20%
+
+```{r}
+# indices del muestreo
+sample_size <-  round(nrow(data)*.80) 
+index <- sample(seq_len(nrow(data)), size = sample_size)
+ 
+# se hace la particion
+train.data <- data[index, ]
+test.data <- data[-index, ]
+```
+
+
+En este caso no hay conjunto de *validación* pues no hay muchos hiperparámetros que variarle al modelo de LDA que se ajustará a continuación.
+
+
+### Análisis Discriminante Lineal (LDA)
+
+```{r}
+modelo.lda <- lda(formula = quality.label ~ .,
+                  data = train.data[-12])
+```
+
+Predicciones
+
+```{r}
+pred.lda <- predict(object = modelo.lda, newdata = test.data[-12])
+```
+
+**Exactitud y error**
+
+```{r}
+confusionMatrix(test.data$quality.label, pred.lda$class, 
+                dnn = c("Clase real", "Clase predicha"))
+```
+Error de predicción
+```{r}
+trainig.error <- mean(test.data$quality.label != pred.lda$class) 
+paste("trainig.error=", trainig.error, "%")
+```
+
+Ahora, estandarizando los datos, veamos si mejora en algo
+
+```{r}
+train.data.pre <- preProcess(x = train.data, method = c("center", "scale"))
+train.data.scaled <- predict(train.data.pre, train.data)
+
+test.data.pre <- preProcess(x = test.data, method = c("center", "scale"))
+test.data.scaled <- predict(test.data.pre, test.data)
+```
+
+
+
+```{r}
+modelo.lda2 <- lda(formula = quality.label ~ .,
+                  data = train.data.scaled[-12])
+```
+
+Predicciones
+
+```{r}
+pred.lda2 <- predict(object = modelo.lda2, newdata = test.data.scaled[-12])
+```
+
+**Exactitud y error**
+```{r}
+confusionMatrix(test.data.scaled$quality.label, pred.lda2$class, 
+                dnn = c("Clase real", "Clase predicha"))
+```
+Error de predicción
+```{r}
+trainig.error <- mean(test.data.scaled$quality.label != pred.lda2$class) 
+paste("Error medio=", trainig.error, "%")
+```
+
