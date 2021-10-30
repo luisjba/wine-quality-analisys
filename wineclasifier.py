@@ -224,7 +224,7 @@ class WineMultiClassifier():
                 }
             },
             'Random Forest Classification':{
-                'name':'Decision Tree Classification',
+                'name':'Random Forest Classification',
                 'modelClass': RandomForestClassifier,
                 'parameters':{
                     "criterion": 'entropy',
